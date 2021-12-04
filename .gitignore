@@ -1,0 +1,3 @@
+# GHDL working directory
+workdir/*
+!workdir/.gitkeep
