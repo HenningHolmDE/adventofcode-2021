@@ -7,7 +7,7 @@ if [ -z "$filename" ]; then
     echo ""
     echo "Example: $0 day_01"
 else
-    ghdl -a --std=08 --workdir=workdir src/$filename.vhd
-    ghdl -e --std=08 --workdir=workdir -o workdir/$filename $filename
-    workdir/$filename
+    ghdl -a --std=08 --workdir=workdir src/$filename.vhd \
+    && ghdl -e --std=08 --workdir=workdir -o workdir/$filename $filename \
+    && workdir/$filename
 fi
