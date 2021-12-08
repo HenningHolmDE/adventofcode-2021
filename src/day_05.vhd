@@ -71,16 +71,15 @@ architecture simulation of day_05 is
         return result;
     end function;
 
-    -- Part One: Number of points where at least two horizontal or vertical lines overlap.
-    function number_of_dangerous_areas_part1(
+    type overlaps_t is array(natural range <>, natural range <>) of natural;
+
+    -- Calculate line overlaps
+    function calculate_overlaps_for_horizontal_and_vertical_lines(
         lines : lines_t
-    ) return natural is
-        variable line1 : line_t;
-        type overlaps_t is array(natural range <>, natural range <>) of natural;
+    ) return overlaps_t is
+        variable line1    : line_t;
         variable overlaps : overlaps_t(0 to maximum_x(lines), 0 to maximum_y(lines));
-        variable result   : natural;
     begin
-        -- Calculate line overlaps
         for LINE_INDEX in lines'range loop
             line1 := lines(LINE_INDEX);
             if is_horizontal_or_vertical(line1) then
@@ -91,8 +90,15 @@ architecture simulation of day_05 is
                 end loop;
             end if;
         end loop;
+        return overlaps;
+    end function;
 
-        -- Check for points with at least two overlaps
+    -- Check for points with at least two overlaps
+    function count_dangerous_points(
+        overlaps : overlaps_t
+    ) return natural is
+        variable result : natural;
+    begin
         result := 0;
         for X in overlaps'range(1) loop
             for Y in overlaps'range(2) loop
@@ -103,6 +109,55 @@ architecture simulation of day_05 is
         end loop;
 
         return result;
+    end function;
+
+    -- Part One: Number of points where at least two horizontal or vertical lines overlap.
+    function number_of_dangerous_areas_part1(
+        lines : lines_t
+    ) return natural is
+        variable line1    : line_t;
+        variable overlaps : overlaps_t(0 to maximum_x(lines), 0 to maximum_y(lines));
+    begin
+        overlaps := calculate_overlaps_for_horizontal_and_vertical_lines(lines);
+
+        return count_dangerous_points(overlaps);
+    end function;
+
+    -- Part Two: Number of points where at least two of all lines overlap.
+    function number_of_dangerous_areas_part2(
+        lines : lines_t
+    ) return natural is
+        variable overlaps        : overlaps_t(0 to maximum_x(lines), 0 to maximum_y(lines));
+        variable line1           : line_t;
+        variable diagonal_length : natural;
+        variable diagonal_x      : natural;
+        variable diagonal_y      : natural;
+        variable result          : natural;
+    begin
+        overlaps := calculate_overlaps_for_horizontal_and_vertical_lines(lines);
+
+        -- add overlaps for diagonal lines
+        for LINE_INDEX in lines'range loop
+            line1 := lines(LINE_INDEX);
+            if not is_horizontal_or_vertical(line1) then
+                diagonal_length := maximum(line1.x1, line1.x2) - minimum(line1.x1, line1.x2);
+                for DIAGONAL_INC in 0 to diagonal_length loop
+                    if line1.x1 > line1.x2 then
+                        diagonal_x := line1.x1 - DIAGONAL_INC;
+                    else
+                        diagonal_x := line1.x1 + DIAGONAL_INC;
+                    end if;
+                    if line1.y1 > line1.y2 then
+                        diagonal_y := line1.y1 - DIAGONAL_INC;
+                    else
+                        diagonal_y := line1.y1 + DIAGONAL_INC;
+                    end if;
+                    overlaps(diagonal_x, diagonal_y) := overlaps(diagonal_x, diagonal_y) + 1;
+                end loop;
+            end if;
+        end loop;
+
+        return count_dangerous_points(overlaps);
     end function;
 
 begin
@@ -157,8 +212,17 @@ begin
 
         result := number_of_dangerous_areas_part1(lines_ptr.all);
         report "Number of dangerous areas in input file: " & integer'image(result);
+        assert result = 6548;
 
-        -- report "*** Part Two ***";
+        report "*** Part Two ***";
+
+        result := number_of_dangerous_areas_part2(EXAMPLE_LINES);
+        report "Number of dangerous areas in example input: " & integer'image(result);
+        assert result = 12;
+
+        result := number_of_dangerous_areas_part2(lines_ptr.all);
+        report "Number of dangerous areas in input file: " & integer'image(result);
+        assert result = 19663;
 
         deallocate(lines_ptr);
         wait;
