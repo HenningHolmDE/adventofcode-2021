@@ -165,7 +165,7 @@ architecture simulation of day_04 is
         return result;
     end function;
 
-    -- Part One: Calculate score of winning board
+    -- Part One: Calculate score of first winning board
     function calculate_score_part1(
         boards        : boards_t;
         drawn_numbers : integer_vector
@@ -184,6 +184,34 @@ architecture simulation of day_04 is
             end if;
         end loop;
         report "Drawn all numbers but found no winning board!" severity error;
+        return 0;
+    end function;
+
+    -- Part Two: Calculate score of last winning board
+    function calculate_score_part2(
+        boards        : boards_t;
+        drawn_numbers : integer_vector
+    ) return natural is
+        variable marked_boards      : marked_boards_t(boards'range);
+        variable drawn_number       : natural;
+        variable maybe_marked_board : maybe_marked_board_t;
+        variable winning_boards     : boolean_vector(boards'range);
+    begin
+        marked_boards := create_marked_boards(boards);
+        draw_l : for I in drawn_numbers'range loop
+            drawn_number  := drawn_numbers(I);
+            marked_boards := mark_drawn_number(marked_boards, drawn_number);
+            for BOARD_INDEX in marked_boards'range loop
+                if not winning_boards(BOARD_INDEX) and is_winning_board(marked_boards(BOARD_INDEX)) then
+                    winning_boards(BOARD_INDEX) := true;
+                    if and winning_boards then
+                        -- all boards have now won, return score of this board
+                        return drawn_number * sum_of_unmarked(marked_boards(BOARD_INDEX));
+                    end if;
+                end if;
+            end loop;
+        end loop;
+        report "Drawn all numbers but not all boards won!" severity error;
         return 0;
     end function;
 
@@ -268,7 +296,14 @@ begin
         result := calculate_score_part1(boards_ptr.all, drawn_numbers_ptr.all);
         report "Score for input file: " & integer'image(result);
 
-        -- report "*** Part Two ***";
+        report "*** Part Two ***";
+
+        result := calculate_score_part2(EXAMPLE_BOARDS, EXAMPLE_DRAWN_NUMBERS);
+        report "Score for example input: " & integer'image(result);
+        assert result = 1924;
+
+        result := calculate_score_part2(boards_ptr.all, drawn_numbers_ptr.all);
+        report "Score for input file: " & integer'image(result);
 
         deallocate(drawn_numbers_ptr);
         deallocate(boards_ptr);
