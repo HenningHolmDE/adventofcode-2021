@@ -9,5 +9,5 @@ if [ -z "$filename" ]; then
 else
     ghdl -a --std=08 --workdir=workdir src/$filename.vhd \
     && ghdl -e --std=08 --workdir=workdir -o workdir/$filename $filename \
-    && workdir/$filename
+    && workdir/$filename --max-stack-alloc=0
 fi
