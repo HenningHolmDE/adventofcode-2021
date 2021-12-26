@@ -5,10 +5,17 @@ end entity;
 
 use std.textio.all;
 
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
 architecture simulation of day_14 is
 
+    subtype big_unsigned_t is unsigned(63 downto 0);
+
+    subtype pair_t is string(1 to 2);
     type rule_t is record
-        pair : string(1 to 2);
+        pair : pair_t;
         char : character;
     end record;
     type rules_t is array(natural range <>) of rule_t;
@@ -40,56 +47,97 @@ architecture simulation of day_14 is
     )
     );
 
+    type big_unsigned_vector_t is array(natural range <>) of big_unsigned_t;
+    type template_in_pairs_t is record
+        first_char  : character;
+        last_char   : character;
+        pair_counts : big_unsigned_vector_t;
+    end record;
+
+    -- Calculate the difference of the quantity of the most common element
+    -- and the quantity of the least common element.
     function calculate_quantity_difference(
-        template : string
-    ) return natural is
-        type quantities_t is array(character) of natural;
+        template : template_in_pairs_t;
+        rules    : rules_t
+    ) return big_unsigned_t is
+        type quantities_t is array(character) of big_unsigned_t;
         variable quantities : quantities_t;
-        variable minq, maxq : natural;
+        variable minq, maxq : big_unsigned_t;
     begin
-        -- Count quantities of all characters.
-        quantities := (others => 0);
-        for I in template'range loop
-            quantities(template(I)) := quantities(template(I)) + 1;
+        -- Initialize with first and last character of template.
+        quantities                      := (others => (others => '0'));
+        quantities(template.first_char) := to_unsigned(1, big_unsigned_t'length);
+        quantities(template.last_char)  := to_unsigned(1, big_unsigned_t'length);
+
+        -- Add pair counts to both characters in pair.
+        for I in rules'range loop
+            quantities(rules(I).pair(1)) :=
+            (
+            quantities(rules(I).pair(1)) + template.pair_counts(I)
+            );
+            quantities(rules(I).pair(2)) :=
+            (
+            quantities(rules(I).pair(2)) + template.pair_counts(I)
+            );
         end loop;
+
+        -- Note: As the quantities have been extracted from pairs, all
+        --       quantities are twice their actual value.
+        --       However, it it more efficient to handle this at the end.
+
         -- Find minimum (non-zero) and maximum quantity.
-        minq := natural'high;
-        maxq := 0;
+        minq := (others => '1');
+        maxq := (others => '0');
         for C in character loop
             if quantities(C) > 0 then
                 minq := minimum(minq, quantities(C));
                 maxq := maximum(maxq, quantities(C));
             end if;
         end loop;
+
         -- Return difference of most common and least common element.
-        return maxq - minq;
+        return (maxq - minq) / 2; -- / 2 to get actual quantity.
     end function;
 
     -- Perform pair insertion and return new template.
     function perform_pair_insertion(
-        template : string;
+        template : template_in_pairs_t;
         rules    : rules_t
-    ) return string is
-        -- As an element will be inserted into every pair of elemente,
-        -- the template length will grow to (2 * l - 1).
-        variable new_template : string(1 to 2 * template'length - 1);
-        variable pair         : string(1 to 2);
+    ) return template_in_pairs_t is
+        variable new_template : template_in_pairs_t(
+        pair_counts(template.pair_counts'range)
+        );
+        variable pair : pair_t;
     begin
-        new_template := (others => '_');
-        for T in template'range loop
-            -- Add current element to new template.
-            new_template(2 * T - 1) := template(T);
-            -- Perform pair insertion for current pair.
-            if T < template'high then
-                pair := template(T to T + 1);
-                -- Find rule for pair.
-                for R in rules'range loop
-                    if rules(R).pair = pair then
-                        new_template(2 * T) := rules(R).char;
-                        exit;
-                    end if;
-                end loop;
-            end if;
+        new_template := (
+            first_char => template.first_char,
+            last_char  => template.last_char,
+            pair_counts => (others => (others => '0'))
+            );
+        for I in rules'range loop
+            -- Every occurence of a pair will end up in two new pairs.
+            -- Add first pair after insertion.
+            pair := rules(I).pair(1) & rules(I).char;
+            for J in rules'range loop
+                if rules(J).pair = pair then
+                    new_template.pair_counts(J) :=
+                    (
+                    new_template.pair_counts(J) + template.pair_counts(I)
+                    );
+                    exit;
+                end if;
+            end loop;
+            -- Add second pair after insertion.
+            pair := rules(I).char & rules(I).pair(2);
+            for J in rules'range loop
+                if rules(J).pair = pair then
+                    new_template.pair_counts(J) :=
+                    (
+                    new_template.pair_counts(J) + template.pair_counts(I)
+                    );
+                    exit;
+                end if;
+            end loop;
         end loop;
         return new_template;
     end function;
@@ -99,27 +147,36 @@ architecture simulation of day_14 is
     function calculate_quantity_difference_after_insertions(
         input1               : input_t;
         number_of_insertions : natural
-    ) return natural is
-        type string_ptr_t is access string;
-        variable template_ptr     : string_ptr_t;
-        variable template_ptr_old : string_ptr_t;
-        variable result           : natural;
+    ) return big_unsigned_t is
+        variable template : template_in_pairs_t(
+        pair_counts(0 to input1.rules'length)
+        );
+        variable pair : pair_t;
     begin
-        template_ptr := new string'(input1.template);
+        -- Create template_in_pairs_t representation from template.
+        template.first_char  := input1.template(1);
+        template.last_char   := input1.template(input1.template'high);
+        template.pair_counts := (others => (others => '0'));
+
+        -- Determine pair amounts from template string.
+        for T in 1 to input1.template'high - 1 loop
+            pair := input1.template(T to T + 1);
+            for I in input1.rules'range loop
+                if input1.rules(I).pair = pair then
+                    template.pair_counts(I) :=
+                    template.pair_counts(I) + 1;
+                    exit;
+                end if;
+            end loop;
+        end loop;
 
         -- Perform pair insertion steps.
         for STEP in 1 to number_of_insertions loop
-            template_ptr_old := template_ptr;
-            template_ptr     := new string'(
-                perform_pair_insertion(template_ptr.all, input1.rules)
-                );
-            deallocate(template_ptr_old);
+            template := perform_pair_insertion(template, input1.rules);
         end loop;
 
         -- Calculate result.
-        result := calculate_quantity_difference(template_ptr.all);
-        deallocate(template_ptr);
-        return result;
+        return calculate_quantity_difference(template, input1.rules);
     end function;
 
 begin
@@ -134,10 +191,10 @@ begin
         variable input_ptr : input_ptr_t;
 
         variable index : natural;
-        variable pair  : string(1 to 2);
+        variable pair  : pair_t;
         variable char  : character;
 
-        variable result : natural;
+        variable result : big_unsigned_t;
     begin
         report (
             "Length of template in example input: " &
@@ -204,7 +261,7 @@ begin
             );
         report (
             "Quantity difference after 10 steps for example input: " &
-            integer'image(result)
+            integer'image(to_integer(result))
             );
         assert result = 1588;
 
@@ -213,11 +270,29 @@ begin
             );
         report (
             "Quantity difference after 10 steps for input file: " &
-            integer'image(result)
+            integer'image(to_integer(result))
             );
         assert result = 2375;
 
-        -- report "*** Part Two ***";
+        report "*** Part Two ***";
+
+        result := calculate_quantity_difference_after_insertions(
+            EXAMPLE_INPUT, 40
+            );
+        report (
+            "Quantity difference after 40 steps for example input: 0x" &
+            to_hstring(result)
+            );
+        assert result = d"2188189693529";
+
+        result := calculate_quantity_difference_after_insertions(
+            input_ptr.all, 40
+            );
+        report (
+            "Quantity difference after 40 steps for input file: 0x" &
+            to_hstring(result)
+            );
+        assert result = d"1976896901756";
 
         deallocate(input_ptr);
         wait;
