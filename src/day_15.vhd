@@ -24,28 +24,68 @@ architecture simulation of day_15 is
     );
 
     type update_positions_t is array(natural range <>, natural range <>) of boolean;
+    type part_t is (PART_ONE, PART_TWO);
+
+    -- Determine risk level of position in tiled cave.
+    function position_risk_level(
+        risk_levels : risk_levels_t;
+        row, col    : natural
+    ) return natural is
+        variable result : natural;
+    begin
+        result := risk_levels(
+            row mod risk_levels'length(1),
+            col mod risk_levels'length(2)
+            );
+        result := result + row / risk_levels'length(1);
+        result := result + col / risk_levels'length(2);
+        result := ((result - 1) mod 9) + 1;
+        return result;
+    end function;
 
     -- Enable update for positions adjacent to given position. 
     function update_adjacent_positions(
         update_positions : update_positions_t;
+        position_values  : risk_levels_t;
+        risk_levels      : risk_levels_t;
         row, col         : natural
     ) return update_positions_t is
         variable result : update_positions_t(
         update_positions'range(1), update_positions'range(2)
         );
+        variable position_value     : natural;
+        variable adj_position_value : natural;
+        variable adj_risk_level     : natural;
     begin
-        result := update_positions;
+        result         := update_positions;
+        position_value := position_values(row, col);
         if row > 0 then
-            result(row - 1, col) := true;
+            adj_position_value := position_values(row - 1, col);
+            adj_risk_level     := position_risk_level(risk_levels, row - 1, col);
+            if adj_position_value > position_value + adj_risk_level then
+                result(row - 1, col) := true;
+            end if;
         end if;
         if col > 0 then
-            result(row, col - 1) := true;
+            adj_position_value := position_values(row, col - 1);
+            adj_risk_level     := position_risk_level(risk_levels, row, col - 1);
+            if adj_position_value > position_value + adj_risk_level then
+                result(row, col - 1) := true;
+            end if;
         end if;
         if row < update_positions'high(1) then
-            result(row + 1, col) := true;
+            adj_position_value := position_values(row + 1, col);
+            adj_risk_level     := position_risk_level(risk_levels, row + 1, col);
+            if adj_position_value > position_value + adj_risk_level then
+                result(row + 1, col) := true;
+            end if;
         end if;
         if col < update_positions'high(2) then
-            result(row, col + 1) := true;
+            adj_position_value := position_values(row, col + 1);
+            adj_risk_level     := position_risk_level(risk_levels, row, col + 1);
+            if adj_position_value > position_value + adj_risk_level then
+                result(row, col + 1) := true;
+            end if;
         end if;
         return result;
     end function;
@@ -58,6 +98,7 @@ architecture simulation of day_15 is
         row, col        : natural
     ) return natural is
         variable minimum_adjacent_value : natural;
+        variable risk_level             : natural;
     begin
         if row = 0 and col = 0 then
             -- Starting position has not to be entered.
@@ -74,32 +115,59 @@ architecture simulation of day_15 is
                 minimum_adjacent_value, position_values(row, col - 1)
                 );
         end if;
-        if row < risk_levels'high(1) then
+        if row < position_values'high(1) then
             minimum_adjacent_value := minimum(
                 minimum_adjacent_value, position_values(row + 1, col)
                 );
         end if;
-        if col < risk_levels'high(2) then
+        if col < position_values'high(2) then
             minimum_adjacent_value := minimum(
                 minimum_adjacent_value, position_values(row, col + 1)
                 );
         end if;
+
         -- Increase minimum adjacent value by risk level of position.
-        return minimum_adjacent_value + risk_levels(row, col);
+        return (
+        minimum_adjacent_value +
+        position_risk_level(risk_levels, row, col)
+        );
+    end function;
+
+    -- Calculate cave dimension depending on challenge part.
+    function cave_size(
+        risk_levels : risk_levels_t;
+        part        : part_t;
+        dimension   : integer range 1 to 2
+    ) return positive is
+        variable sizes : integer_vector(1 to 2);
+    begin
+        sizes := (risk_levels'length(1), risk_levels'length(1));
+        if part = PART_TWO then
+            sizes := (sizes(1) * 5, sizes(2) * 5);
+        end if;
+        return sizes(dimension);
     end function;
 
     -- Find the lowest total risk of any path from the top left
     -- to the bottom right.
     function lowest_total_risk_path(
-        risk_levels : risk_levels_t
+        risk_levels : risk_levels_t;
+        part        : part_t
     ) return natural is
+        constant NUM_ROWS : positive := cave_size(
+        risk_levels, part, 1
+        );
+        constant NUM_COLS : positive := cave_size(
+        risk_levels, part, 2
+        );
         variable position_values : risk_levels_t(
-        risk_levels'range(1), risk_levels'range(2)
+        0 to NUM_ROWS - 1, 0 to NUM_COLS - 1
         );
         variable update_positions : update_positions_t(
-        risk_levels'range(1), risk_levels'range(2)
+        0 to NUM_ROWS - 1, 0 to NUM_COLS - 1
         );
         variable update_any_position : boolean;
+        variable update_area_size    : natural;
         variable position_value      : natural;
     begin
         -- Starting position has not to be entered.
@@ -109,15 +177,16 @@ architecture simulation of day_15 is
         -- Next, update positions next to starting position.
         update_positions := (others => (others => false));
         update_positions := update_adjacent_positions(
-            update_positions, 0, 0
+            update_positions, position_values, risk_levels, 0, 0
             );
         update_any_position := true;
+        update_area_size    := 10;
 
         -- Update designated positions until no values changed.
         while update_any_position loop
             update_any_position := false;
-            for ROW in risk_levels'range(1) loop
-                for COL in risk_levels'range(2) loop
+            for ROW in 0 to minimum(update_area_size, NUM_ROWS) - 1 loop
+                for COL in 0 to minimum(update_area_size, NUM_COLS) - 1 loop
                     if update_positions(ROW, COL) then
                         update_positions(ROW, COL) := false;
                         -- Calculate position value from adjacent values
@@ -130,16 +199,22 @@ architecture simulation of day_15 is
                             -- request update of adjacent positions. 
                             position_values(row, col) := position_value;
                             update_positions          := update_adjacent_positions(
-                                update_positions, row, col
+                                update_positions, position_values, risk_levels, row, col
                                 );
                             update_any_position := true;
                         end if;
                     end if;
                 end loop;
             end loop;
+            -- Increase update area size.
+            if update_area_size < maximum(NUM_ROWS, NUM_COLS) then
+                update_area_size    := update_area_size + 1;
+                update_any_position := true;
+            end if;
         end loop;
+
         -- Return resulting value of bottom right position.
-        return position_values(risk_levels'high(1), risk_levels'high(2));
+        return position_values(position_values'high(1), position_values'high(2));
     end function;
 
 begin
@@ -187,15 +262,23 @@ begin
 
         report "*** Part One ***";
 
-        result := lowest_total_risk_path(EXAMPLE_RISK_LEVELS);
+        result := lowest_total_risk_path(EXAMPLE_RISK_LEVELS, PART_ONE);
         report "Lowest total risk path for example input: " & integer'image(result);
         assert result = 40;
 
-        result := lowest_total_risk_path(risk_levels_ptr.all);
+        result := lowest_total_risk_path(risk_levels_ptr.all, PART_ONE);
         report "Lowest total risk path for puzzle input: " & integer'image(result);
         assert result = 363;
 
-        -- report "*** Part Two ***";
+        report "*** Part Two ***";
+
+        result := lowest_total_risk_path(EXAMPLE_RISK_LEVELS, PART_TWO);
+        report "Lowest total risk path for example input: " & integer'image(result);
+        assert result = 315;
+
+        result := lowest_total_risk_path(risk_levels_ptr.all, PART_TWO);
+        report "Lowest total risk path for puzzle input: " & integer'image(result);
+        assert result = 2835;
 
         deallocate(risk_levels_ptr);
         wait;
