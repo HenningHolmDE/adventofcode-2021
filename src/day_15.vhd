@@ -23,71 +23,67 @@ architecture simulation of day_15 is
     (2, 3, 1, 1, 9, 4, 4, 5, 8, 1)
     );
 
-    type update_positions_t is array(natural range <>, natural range <>) of boolean;
+    subtype position_t is integer_vector(1 to 2);
+    type update_positions_t is array(natural range <>) of position_t;
+    type update_positions_len_t is record
+        positions : update_positions_t;
+        length    : natural;
+    end record;
     type part_t is (PART_ONE, PART_TWO);
 
     -- Determine risk level of position in tiled cave.
     function position_risk_level(
         risk_levels : risk_levels_t;
-        row, col    : natural
+        position    : position_t
     ) return natural is
         variable result : natural;
     begin
         result := risk_levels(
-            row mod risk_levels'length(1),
-            col mod risk_levels'length(2)
+            position(1) mod risk_levels'length(1),
+            position(2) mod risk_levels'length(2)
             );
-        result := result + row / risk_levels'length(1);
-        result := result + col / risk_levels'length(2);
+        result := result + position(1) / risk_levels'length(1);
+        result := result + position(2) / risk_levels'length(2);
         result := ((result - 1) mod 9) + 1;
         return result;
     end function;
 
     -- Enable update for positions adjacent to given position. 
     function update_adjacent_positions(
-        update_positions : update_positions_t;
-        position_values  : risk_levels_t;
-        risk_levels      : risk_levels_t;
-        row, col         : natural
-    ) return update_positions_t is
-        variable result : update_positions_t(
-        update_positions'range(1), update_positions'range(2)
-        );
-        variable position_value     : natural;
-        variable adj_position_value : natural;
-        variable adj_risk_level     : natural;
+        position_values : risk_levels_t;
+        risk_levels     : risk_levels_t;
+        position        : position_t
+    ) return update_positions_len_t is
+        -- There are only four adjacent positions.
+        variable update_positions     : update_positions_t(0 to 3);
+        variable update_positions_len : natural;
+        variable position_value       : natural;
+        variable adj_position_value   : natural;
+        variable adj_risk_level       : natural;
     begin
-        result         := update_positions;
-        position_value := position_values(row, col);
-        if row > 0 then
-            adj_position_value := position_values(row - 1, col);
-            adj_risk_level     := position_risk_level(risk_levels, row - 1, col);
-            if adj_position_value > position_value + adj_risk_level then
-                result(row - 1, col) := true;
-            end if;
+        update_positions_len := 0;
+        position_value       := position_values(position(1), position(2));
+        if position(1) > 0 then
+            update_positions(update_positions_len) :=
+            (position(1) - 1, position(2));
+            update_positions_len := update_positions_len + 1;
         end if;
-        if col > 0 then
-            adj_position_value := position_values(row, col - 1);
-            adj_risk_level     := position_risk_level(risk_levels, row, col - 1);
-            if adj_position_value > position_value + adj_risk_level then
-                result(row, col - 1) := true;
-            end if;
+        if position(2) > 0 then
+            update_positions(update_positions_len) :=
+            (position(1), position(2) - 1);
+            update_positions_len := update_positions_len + 1;
         end if;
-        if row < update_positions'high(1) then
-            adj_position_value := position_values(row + 1, col);
-            adj_risk_level     := position_risk_level(risk_levels, row + 1, col);
-            if adj_position_value > position_value + adj_risk_level then
-                result(row + 1, col) := true;
-            end if;
+        if position(1) < position_values'high(1) then
+            update_positions(update_positions_len) :=
+            (position(1) + 1, position(2));
+            update_positions_len := update_positions_len + 1;
         end if;
-        if col < update_positions'high(2) then
-            adj_position_value := position_values(row, col + 1);
-            adj_risk_level     := position_risk_level(risk_levels, row, col + 1);
-            if adj_position_value > position_value + adj_risk_level then
-                result(row, col + 1) := true;
-            end if;
+        if position(2) < position_values'high(2) then
+            update_positions(update_positions_len) :=
+            (position(1), position(2) + 1);
+            update_positions_len := update_positions_len + 1;
         end if;
-        return result;
+        return (update_positions, update_positions_len);
     end function;
 
     -- Calculate value for given position from minimum adjacent value
@@ -95,41 +91,45 @@ architecture simulation of day_15 is
     function calculate_position_value(
         risk_levels     : risk_levels_t;
         position_values : risk_levels_t;
-        row, col        : natural
+        position        : position_t
     ) return natural is
         variable minimum_adjacent_value : natural;
         variable risk_level             : natural;
     begin
-        if row = 0 and col = 0 then
+        if position = (0, 0) then
             -- Starting position has not to be entered.
             return 0;
         end if;
         minimum_adjacent_value := integer'high;
-        if row > 0 then
+        if position(1) > 0 then
             minimum_adjacent_value := minimum(
-                minimum_adjacent_value, position_values(row - 1, col)
+                minimum_adjacent_value,
+                position_values(position(1) - 1, position(2))
                 );
         end if;
-        if col > 0 then
+        if position(2) > 0 then
             minimum_adjacent_value := minimum(
-                minimum_adjacent_value, position_values(row, col - 1)
+                minimum_adjacent_value,
+                position_values(position(1), position(2) - 1)
                 );
         end if;
-        if row < position_values'high(1) then
+        if position(1) < position_values'high(1) then
             minimum_adjacent_value := minimum(
-                minimum_adjacent_value, position_values(row + 1, col)
+                minimum_adjacent_value,
+                position_values(position(1) + 1, position(2))
                 );
         end if;
-        if col < position_values'high(2) then
+        if position(2) < position_values'high(2) then
             minimum_adjacent_value := minimum(
-                minimum_adjacent_value, position_values(row, col + 1)
+                minimum_adjacent_value,
+                position_values(position(1), position(2) + 1)
                 );
         end if;
 
         -- Increase minimum adjacent value by risk level of position.
         return (
         minimum_adjacent_value +
-        position_risk_level(risk_levels, row, col)
+        position_risk_level(risk_levels, position)
         );
     end function;
 
@@ -163,54 +163,91 @@ architecture simulation of day_15 is
         variable position_values : risk_levels_t(
         0 to NUM_ROWS - 1, 0 to NUM_COLS - 1
         );
-        variable update_positions : update_positions_t(
-        0 to NUM_ROWS - 1, 0 to NUM_COLS - 1
+        -- Total number of positions should never be exceeded.
+        variable update_positions : update_positions_len_t(
+        positions(0 to NUM_ROWS * NUM_ROWS - 1)
         );
-        variable update_any_position : boolean;
-        variable update_area_size    : natural;
-        variable position_value      : natural;
+        variable update_positions_index : natural;
+        variable update_position        : position_t;
+        variable position_value         : natural;
+        variable new_update_positions   : update_positions_len_t(
+        positions(0 to 3)
+        );
+        variable new_update_position : position_t;
+        variable found               : boolean;
     begin
         -- Starting position has not to be entered.
         position_values       := (others => (others => natural'high));
         position_values(0, 0) := 0;
 
         -- Next, update positions next to starting position.
-        update_positions := (others => (others => false));
-        update_positions := update_adjacent_positions(
-            update_positions, position_values, risk_levels, 0, 0
+        new_update_positions := update_adjacent_positions(
+            position_values, risk_levels, (0, 0)
             );
-        update_any_position := true;
-        update_area_size    := 10;
+        update_positions.positions(0 to 3) := new_update_positions.positions;
+        update_positions.length            := new_update_positions.length;
 
-        -- Update designated positions until no values changed.
-        while update_any_position loop
-            update_any_position := false;
-            for ROW in 0 to minimum(update_area_size, NUM_ROWS) - 1 loop
-                for COL in 0 to minimum(update_area_size, NUM_COLS) - 1 loop
-                    if update_positions(ROW, COL) then
-                        update_positions(ROW, COL) := false;
-                        -- Calculate position value from adjacent values
-                        -- and update position if value has changed.
-                        position_value := calculate_position_value(
-                            risk_levels, position_values, row, col
+        -- Increase update area incrementally.
+        for AREA_SIZE in 10 to maximum(NUM_ROWS, NUM_COLS) loop
+            -- Update positions until all remaining positions are outside of
+            -- update area.
+            update_positions_index := 0;
+            while update_positions_index < update_positions.length loop
+                update_position := (
+                    update_positions.positions(update_positions_index)
+                    );
+                if maximum(update_position(1), update_position(2)) < AREA_SIZE then
+                    -- Calculate position value from adjacent values
+                    -- and update position if value has changed.
+                    position_value := calculate_position_value(
+                        risk_levels, position_values, update_position
+                        );
+                    if position_value /=
+                        position_values(update_position(1), update_position(2)) then
+                        -- Update position with new value and
+                        -- check update of adjacent positions. 
+                        position_values(
+                        update_position(1), update_position(2)
+                        )                    := position_value;
+                        new_update_positions := update_adjacent_positions(
+                            position_values, risk_levels, update_position
                             );
-                        if position_value /= position_values(row, col) then
-                            -- Update position with new value and
-                            -- request update of adjacent positions. 
-                            position_values(row, col) := position_value;
-                            update_positions          := update_adjacent_positions(
-                                update_positions, position_values, risk_levels, row, col
-                                );
-                            update_any_position := true;
-                        end if;
+                        for I in 0 to new_update_positions.length - 1 loop
+                            new_update_position := new_update_positions.positions(I);
+                            -- Skip position if it won't be reduces by update.
+                            if position_values(
+                                new_update_position(1), new_update_position(2)
+                                ) <= (
+                                position_value +
+                                position_risk_level(risk_levels, new_update_position)
+                                ) then
+                                next;
+                            end if;
+                            -- Only add positions that are not in the list already.
+                            found := false;
+                            for J in 0 to update_positions.length - 1 loop
+                                if update_positions.positions(J) =
+                                    new_update_position then
+                                    found := true;
+                                    exit;
+                                end if;
+                            end loop;
+                            if not found then
+                                update_positions.positions(
+                                update_positions.length) := new_update_position;
+                                update_positions.length  := update_positions.length + 1;
+                            end if;
+                        end loop;
                     end if;
-                end loop;
+                    -- Replace handled entry with last entry.
+                    update_positions.positions(update_positions_index) :=
+                    update_positions.positions(update_positions.length - 1);
+                    update_positions.length := update_positions.length - 1;
+                else
+                    -- Advance to next entry.
+                    update_positions_index := update_positions_index + 1;
+                end if;
             end loop;
-            -- Increase update area size.
-            if update_area_size < maximum(NUM_ROWS, NUM_COLS) then
-                update_area_size    := update_area_size + 1;
-                update_any_position := true;
-            end if;
         end loop;
 
         -- Return resulting value of bottom right position.
