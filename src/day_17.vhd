@@ -147,6 +147,7 @@ begin
         read(i_line, target_area.y.min);
         skip_chars(i_line, 2); -- Skip ".."
         read(i_line, target_area.y.max);
+        file_close(i_file);
 
         report (
             "Target area from input file: x=" & integer'image(target_area.x.min) &
